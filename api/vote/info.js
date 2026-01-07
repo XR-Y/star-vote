@@ -29,6 +29,7 @@ export default async function handler(req, res) {
     const data = response.data.results[0] || {};
     res.json({ votes: data });
   } catch (e) {
+    console.log(url)
     console.error('[vote/info] ERROR:', e.response?.data || e.message);
     res.status(500).json({ error: 'Internal server error' });
   }
