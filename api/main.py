@@ -68,6 +68,76 @@ def updateRating(request: Request, response: Response,id: str = "",value: str = 
     
 
 
+@app.post("/api/rating/cancel", response_class=Response)
+def cancelRating(request: Request, response: Response, id: str = "", value: str = ""):
+    if not checkReferer(request):
+        response.status_code = 403
+        return
+    connection = None
+    cursor = None
+
+    if id == "" or value == "":
+        response.status_code = 400
+        return json.dumps({"code": 400, "message": "Bad Request"})
+    value = float(value)
+    if value < 1 or value > 5:
+        response.status_code = 400
+        return json.dumps({"code": 400, "message": "Bad Request"})
+
+    try:
+        connection = psycopg2.connect(databaseUrl)
+        cursor = connection.cursor()
+        value = math.ceil(value)
+
+        sql = f"""
+            UPDATE rating SET
+            "{value}" = GREATEST("{value}" - 1, 0),
+            updated_at = CURRENT_TIMESTAMP
+            WHERE id = %s
+            RETURNING "1", "2", "3", "4", "5", created_at, updated_at;
+        """
+        cursor.execute(sql, (id,))
+        result = cursor.fetchone()
+        connection.commit()
+
+        if result:
+            rating_data = {
+                "1": result[0],
+                "2": result[1],
+                "3": result[2],
+                "4": result[3],
+                "5": result[4],
+                "createdAt": result[5].isoformat().replace('+00:00', 'Z'),
+                "updatedAt": result[6].isoformat().replace('+00:00', 'Z'),
+                "id": id
+            }
+        else:
+            rating_data = {
+                "1": 0,
+                "2": 0,
+                "3": 0,
+                "4": 0,
+                "5": 0,
+                "createdAt": None,
+                "updatedAt": None,
+                "id": id
+            }
+        return json.dumps({"success": "true", "rating": rating_data})
+
+    except psycopg2.Error as e:
+        if connection:
+            connection.rollback()
+        print(f"Database error during rating cancel: {e}")
+        response.status_code = 500
+        return json.dumps({"code": 500, "message": "Database error during rating cancel."})
+
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+
 @app.post("/api/vote/update", response_class=Response)
 def updateVote(request: Request, response: Response, id: str = "", value: str = ""):
     if not checkReferer(request):
@@ -99,6 +169,66 @@ def updateVote(request: Request, response: Response, id: str = "", value: str = 
         print(f"Database error during vote update: {e}")
         response.status_code = 500
         return json.dumps({"code": 500, "message": "Database error during vote update."})
+
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+
+@app.post("/api/vote/cancel", response_class=Response)
+def cancelVote(request: Request, response: Response, id: str = "", value: str = ""):
+    if not checkReferer(request):
+        response.status_code = 403
+        return
+    connection = None
+    cursor = None
+
+    if id == "" or value not in ["up", "down"]:
+        response.status_code = 400
+        return json.dumps({"code": 400, "message": "Bad Request"})
+
+    try:
+        connection = psycopg2.connect(databaseUrl)
+        cursor = connection.cursor()
+        counter_sql = "up = GREATEST(up - 1, 0)" if value == "up" else "down = GREATEST(down - 1, 0)"
+
+        sql = f"""
+            UPDATE vote SET
+            {counter_sql},
+            updated_at = CURRENT_TIMESTAMP
+            WHERE id = %s
+            RETURNING up, down, created_at, updated_at;
+        """
+        cursor.execute(sql, (id,))
+        result = cursor.fetchone()
+        connection.commit()
+
+        if result:
+            vote_data = {
+                "id": id,
+                "up": result[0],
+                "down": result[1],
+                "createdAt": result[2].isoformat().replace('+00:00', 'Z'),
+                "updatedAt": result[3].isoformat().replace('+00:00', 'Z'),
+            }
+        else:
+            vote_data = {
+                "id": id,
+                "up": 0,
+                "down": 0,
+                "createdAt": None,
+                "updatedAt": None,
+            }
+        return json.dumps({"success": "true", "votes": vote_data})
+
+    except psycopg2.Error as e:
+        if connection:
+            connection.rollback()
+        print(f"Database error during vote cancel: {e}")
+        response.status_code = 500
+        return json.dumps({"code": 500, "message": "Database error during vote cancel."})
 
     finally:
         if cursor:
