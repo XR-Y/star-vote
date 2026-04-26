@@ -4,4 +4,4 @@
 
 部署参考：https://blog.hzchu.top/2025/StarVote%E7%9A%84python%E5%AE%9E%E7%8E%B0/
 
-增加：取消点赞/评分。
+新增功能：取消当前点赞/评分
