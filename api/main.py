@@ -1,5 +1,4 @@
 # -*- coding:utf-8 -*-
-import uvicorn
 import json
 from fastapi import FastAPI,Response, Request
 from fastapi.responses import Response, HTMLResponse
@@ -258,11 +257,11 @@ def renderDashboardHtml(stats, top_votes, logs, region_top, period_key, period_l
 
 
 def getDashboardData(period_key: str):
-        selected = period_key if period_key in VIEW_PERIODS else "7d"
-        period_label, delta = VIEW_PERIODS[selected]
-        since = None
-        if delta is not None:
-                since = datetime.now(timezone.utc) - delta
+    selected = period_key if period_key in VIEW_PERIODS else "7d"
+    period_label, delta = VIEW_PERIODS[selected]
+    since = None
+    if delta is not None:
+        since = datetime.now(timezone.utc) - delta
 
     stats = {
         "vote_items": 0,
@@ -883,5 +882,6 @@ def checkReferer(request):
 
 
 if __name__ == "__main__":
-        uvicorn.run("main:app", host="0.0.0.0", reload=True)
-        # uvicorn.run("main:app", host="0.0.0.0", reload=True,port=18081)
+    import uvicorn
+    uvicorn.run("main:app", host="0.0.0.0", reload=True)
+    # uvicorn.run("main:app", host="0.0.0.0", reload=True,port=18081)
