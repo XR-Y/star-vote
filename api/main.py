@@ -13,6 +13,7 @@ app = FastAPI(docs_url=None, redoc_url=None)
 allowedHosts = os.getenv("ALLOWED_HOSTS")
 databaseUrl = os.getenv("DATABASE_URL") 
 amdinPWD = os.getenv("ADMIN_PWD")
+MAX_BATCH_VOTE_IDS = 200
 
 app.add_middleware(
     CORSMiddleware,
@@ -271,6 +272,72 @@ def getVoteInfo(request: Request, response: Response, id: str = "default"):
 
     except psycopg2.Error as e:
         print(f"Database error during vote info retrieval: {e}")
+        response.status_code = 500
+        return json.dumps({"code": 500, "message": "Database error"})
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+
+@app.get("/api/vote/batch_info", response_class=Response)
+def getVoteBatchInfo(request: Request, response: Response, ids: str = ""):
+    if not checkReferer(request):
+        response.status_code = 403
+        return
+
+    if ids.strip() == "":
+        response.status_code = 400
+        return json.dumps({"code": 400, "message": "Bad Request"})
+
+    raw_ids = [item.strip() for item in ids.split(",") if item.strip()]
+    if len(raw_ids) == 0:
+        response.status_code = 400
+        return json.dumps({"code": 400, "message": "Bad Request"})
+    if len(raw_ids) > MAX_BATCH_VOTE_IDS:
+        response.status_code = 400
+        return json.dumps({
+            "code": 400,
+            "message": f"Too many ids, max {MAX_BATCH_VOTE_IDS}"
+        })
+
+    # Keep original order while avoiding duplicate DB lookups.
+    query_ids = list(dict.fromkeys(raw_ids))
+
+    connection = None
+    cursor = None
+    try:
+        connection = psycopg2.connect(databaseUrl)
+        cursor = connection.cursor()
+        sql = "SELECT id, up, down, created_at, updated_at FROM vote WHERE id = ANY(%s)"
+        cursor.execute(sql, (query_ids,))
+        results = cursor.fetchall()
+
+        by_id = {}
+        for row in results:
+            by_id[row[0]] = {
+                "id": row[0],
+                "up": row[1],
+                "down": row[2],
+                "createdAt": row[3].isoformat().replace('+00:00', 'Z'),
+                "updatedAt": row[4].isoformat().replace('+00:00', 'Z'),
+            }
+
+        votes = []
+        for vote_id in raw_ids:
+            votes.append(by_id.get(vote_id, {
+                "id": vote_id,
+                "up": 0,
+                "down": 0,
+                "createdAt": None,
+                "updatedAt": None,
+            }))
+
+        return json.dumps({"votes": votes})
+
+    except psycopg2.Error as e:
+        print(f"Database error during vote batch info retrieval: {e}")
         response.status_code = 500
         return json.dumps({"code": 500, "message": "Database error"})
     finally:
